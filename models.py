@@ -36,6 +36,9 @@ class CompletedResearch(BaseModel):
 
 class ResearchState(BaseModel):
     """Parent graph state."""
+    # topic/max_turns also live in InterviewState, so N parallel Send branches
+    # write them back concurrently; keep-first reducers avoid InvalidUpdateError
+    # (all branches carry identical values).
     topic: Annotated[str, lambda a, b: a]
     num_researchers: int = 3
     max_turns: Annotated[int, lambda a, b: a] = 2
