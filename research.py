@@ -29,7 +29,10 @@ def parse_args(argv=None):
                         help="Q&A rounds per researcher (default: 2)")
     parser.add_argument("--model", default="gpt-4o-mini",
                         help="OpenAI model (default: gpt-4o-mini)")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.researchers < 1:
+        parser.error("--researchers must be >= 1")
+    return args
 
 
 def print_team(payload):
@@ -62,8 +65,12 @@ def main(argv=None):
             print("Approved. Researchers are working (this can take a minute)...")
         result = graph.invoke(Command(resume=feedback), config)
 
+    report = result.get("final_report")
+    if not report:
+        raise SystemExit("No research was produced (the researcher team came back empty). "
+                         "Try a broader topic or a different --researchers count.")
     print("\n" + "=" * 72 + "\n")
-    print(result["final_report"])
+    print(report)
 
 
 if __name__ == "__main__":

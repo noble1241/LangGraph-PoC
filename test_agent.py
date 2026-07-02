@@ -188,6 +188,19 @@ class TestParentGraph:
         # regenerated team pauses at a fresh interrupt instead of finishing
         assert "__interrupt__" in result
 
+    def test_empty_team_ends_without_report(self):
+        llm = make_fake_llm()
+        llm.with_structured_output.side_effect = None
+        structured = MagicMock()
+        structured.invoke.return_value = ResearcherTeam(researchers=[])
+        llm.with_structured_output.return_value = structured
+        graph = build_graph(llm=llm, web_search=make_fake_web_search(),
+                            wiki_retriever=make_fake_wiki())
+        config = self.config()
+        graph.invoke({"topic": "espresso", "num_researchers": 2, "max_turns": 1}, config)
+        result = graph.invoke(Command(resume=""), config)
+        assert result.get("final_report") is None
+
 
 from research import parse_args, require_env_keys
 
@@ -212,3 +225,7 @@ class TestCLI:
 
     def test_require_env_keys_passes_when_all_present(self):
         require_env_keys(env={"OPENAI_API_KEY": "sk-x", "TAVILY_API_KEY": "tvly-x"})
+
+    def test_parse_args_rejects_zero_researchers(self):
+        with pytest.raises(SystemExit):
+            parse_args(["t", "--researchers", "0"])
