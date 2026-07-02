@@ -9,37 +9,11 @@ from langgraph.types import Send, interrupt
 
 from models import (CompletedResearch, InterviewState, Researcher,  # noqa: F401
                     ResearcherTeam, ResearchState, SearchQuery)
+from prompts import (ANSWER_PROMPT, BODY_PROMPT, CONCLUSION_PROMPT,
+                     CREATE_RESEARCHERS_PROMPT, INTRO_PROMPT, QUESTION_PROMPT,
+                     SEARCH_PROMPT, SUMMARY_PROMPT)
 
-# --- Prompts -----------------------------------------------------------------
-
-QUESTION_PROMPT = """You are a researcher with this persona:
-{persona}
-
-You are interviewing an expert to learn about: {topic}
-
-Ask one insightful question that digs into your specific focus area. If the
-conversation already contains answers, ask a follow-up that goes deeper or
-fills a gap. Reply with only the question."""
-
-SEARCH_PROMPT = """You will be given a conversation between a researcher and an
-expert. Generate one well-formed web search query that would help answer the
-researcher's latest question."""
-
-ANSWER_PROMPT = """You are an expert being interviewed by a researcher. Answer
-their latest question using ONLY the context below. Be specific, and mention
-which document supports each claim where possible.
-
-Context:
-{context}"""
-
-SUMMARY_PROMPT = """You are the researcher with this persona:
-{persona}
-
-Below is the transcript of your expert interview about: {topic}
-
-Write a focused research memo (2-4 paragraphs) capturing the key findings from
-your angle. Include the concrete facts from the interview."""
-
+MAX_REPORT_SOURCES = 10
 
 # --- Routing (module level for testability) ----------------------------------
 
@@ -119,41 +93,6 @@ def build_interview_graph(llm, web_search, wiki_retriever):
     return builder.compile()
 
 
-# --- Parent-graph prompts ------------------------------------------------------
-
-CREATE_RESEARCHERS_PROMPT = """You are assembling a team of {num} researcher
-personas to investigate a topic.
-
-Topic: {topic}
-
-Previous human feedback on the proposed team (incorporate it if present):
-{feedback}
-
-Create exactly {num} researchers with distinct, complementary angles on the
-topic. Give each a realistic name, a professional role, and a one-sentence
-focus describing the specific angle they will investigate."""
-
-INTRO_PROMPT = """Write a compelling introduction (a `# <title>` line then 1-2
-paragraphs) for a research report on: {topic}
-
-The report is based on these research memos:
-{research}"""
-
-BODY_PROMPT = """Write the main body of a research report on: {topic}
-
-Synthesize these research memos from different researchers into coherent
-markdown sections (## headers). Preserve concrete facts; do not invent
-information.
-
-{research}"""
-
-CONCLUSION_PROMPT = """Write a concise conclusion (one paragraph, starting with
-the line `## Conclusion`) for a research report on: {topic}
-
-Research memos:
-{research}"""
-
-
 def format_research(completed: list[CompletedResearch]) -> str:
     return "\n\n".join(
         f"### Memo from {cr.researcher.name} ({cr.researcher.role})\n{cr.summary}"
@@ -220,7 +159,10 @@ def build_graph(model: str = "gpt-4o-mini", llm=None, web_search=None,
 
     def finalize_report(state: ResearchState):
         sources = sorted({s for cr in state.completed_research for s in cr.sources})
-        sources_md = "\n".join(f"- {s}" for s in sources) or "- (none collected)"
+        shown, remaining = sources[:MAX_REPORT_SOURCES], len(sources) - MAX_REPORT_SOURCES
+        sources_md = "\n".join(f"- {s}" for s in shown) or "- (none collected)"
+        if remaining > 0:
+            sources_md += f"\n- ...and {remaining} more"
         report = (f"{state.intro}\n\n{state.body}\n\n{state.conclusion}"
                   f"\n\n## Sources\n{sources_md}\n")
         return {"final_report": report}

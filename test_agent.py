@@ -213,6 +213,22 @@ class TestParentGraph:
         assert state["topic"] == "espresso"
         assert state["max_turns"] == 3
 
+    def test_finalize_report_caps_sources_list(self):
+        from agent import MAX_REPORT_SOURCES
+
+        llm = make_fake_llm()
+        many_sources = [f"http://example.com/{i}" for i in range(MAX_REPORT_SOURCES + 5)]
+        memo = CompletedResearch(researcher=RESEARCHER, summary="s", sources=many_sources)
+        graph = self.build()
+        state = ResearchState(topic="t", researchers=[RESEARCHER],
+                              completed_research=[memo], intro="i", body="b",
+                              conclusion="c")
+        finalize_report = graph.get_graph().nodes["finalize_report"].data
+        result = finalize_report.invoke(state)
+        report = result["final_report"]
+        assert report.count("http://example.com/") == MAX_REPORT_SOURCES
+        assert "...and 5 more" in report
+
 
 from research import parse_args, require_env_keys
 
