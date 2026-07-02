@@ -187,3 +187,28 @@ class TestParentGraph:
         result = graph.invoke(Command(resume="swap the economist"), config)
         # regenerated team pauses at a fresh interrupt instead of finishing
         assert "__interrupt__" in result
+
+
+from research import parse_args, require_env_keys
+
+
+class TestCLI:
+    def test_parse_args_defaults(self):
+        args = parse_args(["quantum computing"])
+        assert args.topic == "quantum computing"
+        assert args.researchers == 3
+        assert args.max_turns == 2
+        assert args.model == "gpt-4o-mini"
+
+    def test_parse_args_overrides(self):
+        args = parse_args(["t", "--researchers", "5", "--max-turns", "1",
+                           "--model", "gpt-4o"])
+        assert (args.researchers, args.max_turns, args.model) == (5, 1, "gpt-4o")
+
+    def test_require_env_keys_raises_naming_missing_keys(self):
+        with pytest.raises(SystemExit) as exc:
+            require_env_keys(env={"OPENAI_API_KEY": "sk-x"})
+        assert "TAVILY_API_KEY" in str(exc.value)
+
+    def test_require_env_keys_passes_when_all_present(self):
+        require_env_keys(env={"OPENAI_API_KEY": "sk-x", "TAVILY_API_KEY": "tvly-x"})
