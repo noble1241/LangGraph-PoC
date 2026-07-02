@@ -201,6 +201,18 @@ class TestParentGraph:
         result = graph.invoke(Command(resume=""), config)
         assert result.get("final_report") is None
 
+    def test_topic_survives_the_state_reducer(self):
+        # Regression test: the ResearchState.topic/max_turns reducers must keep
+        # the incoming value, not the field's pre-write zero-value. A reducer
+        # of `lambda a, b: a` silently discards every write (topic ends up ""),
+        # which a MagicMock LLM can't catch since it ignores prompt content.
+        graph = self.build()
+        config = self.config()
+        graph.invoke({"topic": "espresso", "num_researchers": 1, "max_turns": 3}, config)
+        state = graph.get_state(config).values
+        assert state["topic"] == "espresso"
+        assert state["max_turns"] == 3
+
 
 from research import parse_args, require_env_keys
 

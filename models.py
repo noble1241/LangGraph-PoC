@@ -37,11 +37,14 @@ class CompletedResearch(BaseModel):
 class ResearchState(BaseModel):
     """Parent graph state."""
     # topic/max_turns also live in InterviewState, so N parallel Send branches
-    # write them back concurrently; keep-first reducers avoid InvalidUpdateError
-    # (all branches carry identical values).
-    topic: Annotated[str, lambda a, b: a]
+    # write them back concurrently; a reducer avoids InvalidUpdateError (all
+    # branches carry identical values, so which one "wins" doesn't matter).
+    # NOTE: `lambda a, b: a` is wrong here — LangGraph seeds the channel with
+    # the field's zero-value ("") before the first real write, so `a` is that
+    # empty default and every write, including the initial one, is discarded.
+    topic: Annotated[str, lambda a, b: b]
     num_researchers: int = 3
-    max_turns: Annotated[int, lambda a, b: a] = 2
+    max_turns: Annotated[int, lambda a, b: b] = 2
     researchers: list[Researcher] = []
     human_feedback: str | None = None
     completed_research: Annotated[list[CompletedResearch], operator.add] = []
