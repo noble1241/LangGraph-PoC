@@ -7,8 +7,23 @@ findings are synthesized into a report written to your terminal.
 
 ## Setup
 
+Option A — from the environment file:
+
 ```bash
 conda env create -f environment.yml
+```
+
+Option B — bare conda env + pip requirements:
+
+```bash
+conda create -n langgraph-poc python=3.11 -y
+conda activate langgraph-poc
+pip install -r requirements.txt
+```
+
+Then in either case:
+
+```bash
 cp .env.example .env
 # edit .env and paste your OPENAI_API_KEY and TAVILY_API_KEY
 ```
