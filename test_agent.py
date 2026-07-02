@@ -14,7 +14,9 @@ from models import (
     ResearchState,
     SearchQuery,
 )
-from agent import build_interview_graph, route_after_answer
+from langgraph.types import Command, Send
+
+from agent import build_graph, build_interview_graph, route_after_answer, route_after_approval
 
 RESEARCHER = Researcher(name="Ada Vale", role="Materials scientist", focus="battery chemistry")
 
@@ -129,3 +131,59 @@ class TestInterviewGraph:
         result = graph.invoke({"researcher": RESEARCHER, "topic": "espresso", "max_turns": 1})
         assert len(result["completed_research"]) == 1
         assert result["completed_research"][0].sources == []
+
+
+class TestParentGraph:
+    def build(self):
+        return build_graph(llm=make_fake_llm(), web_search=make_fake_web_search(),
+                           wiki_retriever=make_fake_wiki())
+
+    @staticmethod
+    def config():
+        return {"recursion_limit": 100, "configurable": {"thread_id": "t1"}}
+
+    def test_graph_has_expected_nodes(self):
+        nodes = set(self.build().get_graph().nodes)
+        assert {"create_researchers", "human_approval", "conduct_research",
+                "write_intro", "write_body", "write_conclusion",
+                "finalize_report"} <= nodes
+
+    def test_route_after_approval_feedback_regenerates(self):
+        state = ResearchState(topic="t", researchers=[RESEARCHER],
+                              human_feedback="more diversity")
+        assert route_after_approval(state) == "create_researchers"
+
+    def test_route_after_approval_approved_fans_out(self):
+        state = ResearchState(topic="t", max_turns=2,
+                              researchers=[RESEARCHER, RESEARCHER])
+        sends = route_after_approval(state)
+        assert [s.node for s in sends] == ["conduct_research", "conduct_research"]
+        assert all(isinstance(s, Send) for s in sends)
+        assert sends[0].arg["topic"] == "t"
+        assert sends[0].arg["max_turns"] == 2
+
+    def test_run_pauses_at_approval_then_resumes_to_report(self):
+        graph = self.build()
+        config = self.config()
+        result = graph.invoke({"topic": "espresso", "num_researchers": 2,
+                               "max_turns": 1}, config)
+        # paused at the human approval interrupt
+        assert "__interrupt__" in result
+        payload = result["__interrupt__"][0].value
+        assert len(payload["researchers"]) == 2
+        assert payload["researchers"][0]["name"] == "Ada Vale"
+        # resume with empty feedback = approve
+        result = graph.invoke(Command(resume=""), config)
+        assert "__interrupt__" not in result
+        assert len(result["completed_research"]) == 2  # one memo per researcher
+        assert "fake LLM response" in result["final_report"]
+        assert "## Sources" in result["final_report"]
+        assert "http://web.example/a" in result["final_report"]
+
+    def test_feedback_regenerates_and_pauses_again(self):
+        graph = self.build()
+        config = self.config()
+        graph.invoke({"topic": "espresso", "num_researchers": 2, "max_turns": 1}, config)
+        result = graph.invoke(Command(resume="swap the economist"), config)
+        # regenerated team pauses at a fresh interrupt instead of finishing
+        assert "__interrupt__" in result

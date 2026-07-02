@@ -36,9 +36,9 @@ class CompletedResearch(BaseModel):
 
 class ResearchState(BaseModel):
     """Parent graph state."""
-    topic: str
+    topic: Annotated[str, lambda a, b: a]
     num_researchers: int = 3
-    max_turns: int = 2
+    max_turns: Annotated[int, lambda a, b: a] = 2
     researchers: list[Researcher] = []
     human_feedback: str | None = None
     completed_research: Annotated[list[CompletedResearch], operator.add] = []
